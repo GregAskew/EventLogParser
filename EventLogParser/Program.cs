@@ -15,89 +15,94 @@
     class Program {
         static void Main(string[] args) {
 
-            if ((args.Length == 0) || (args[0] == "-?")) {
+            if ((args.Length == 0) || (args[0] == "-?") || (args[0] == "/?")) {
                 PrintUsage();
                 return;
-            }
-
-            var argsList = new List<string>();
-            foreach (var arg in args) {
-                argsList.Add(arg.ToLowerInvariant());
             }
 
             #region Check for required parameters
-            if (args.Any(x => string.Equals(x, "-file", StringComparison.OrdinalIgnoreCase)) && args.Any(x => string.Equals(x, "-computerFqdn", StringComparison.OrdinalIgnoreCase))) {
-                Console.WriteLine("Must specify either -file or -computerFqdn, but not both.");
+            if (args.Any(x => x.IndexOf("/FilePath:", StringComparison.OrdinalIgnoreCase) > -1)
+                && args.Any(x => x.IndexOf("/ComputerFqdn:", StringComparison.OrdinalIgnoreCase) > -1)) {
+                Console.WriteLine("Must specify either /FilePath: or /ComputerFqdn:, but not both.");
                 PrintUsage();
                 return;
             }
 
-            if (!args.Any(x => string.Equals(x, "-file", StringComparison.OrdinalIgnoreCase)) && !args.Any(x => string.Equals(x, "-computerFqdn", StringComparison.OrdinalIgnoreCase))) {
-                Console.WriteLine("Must specify either -file or -computerFqdn.");
+            if (!args.Any(x => x.IndexOf("/FilePath:", StringComparison.OrdinalIgnoreCase) > -1)
+                && !args.Any(x => x.IndexOf("/ComputerFqdn:", StringComparison.OrdinalIgnoreCase) > -1)) {
+                Console.WriteLine("Must specify either /FilePath: or /ComputerFqdn:.");
                 PrintUsage();
                 return;
             }
 
-            if (args.Any(x => string.Equals(x, "-computerFqdn", StringComparison.OrdinalIgnoreCase)) && !args.Any(x => string.Equals(x, "-logName", StringComparison.OrdinalIgnoreCase))) {
-                Console.WriteLine("Must specify -logName with -computerFqdn.");
+            if (args.Any(x => x.IndexOf("/ComputerFqdn:", StringComparison.OrdinalIgnoreCase) > -1)
+                && !args.Any(x => x.IndexOf("/LogName:", StringComparison.OrdinalIgnoreCase) > -1)) {
+                Console.WriteLine("Must specify /LogName: with /ComputerFqdn:.");
                 PrintUsage();
                 return;
             }
             #endregion
 
-            var file = string.Empty;
+            var filePath = string.Empty;
             var computerFqdn = string.Empty;
             var logName = string.Empty;
             var format = ReportFormat.CSV;
 
             #region Get file path
-            int fileIndex = argsList.IndexOf("-file");
-            if (fileIndex > -1) {
-                if (argsList.Count > (fileIndex + 1)) {
-                    file = argsList[fileIndex + 1];
+            var filePathArg = args
+                .Where(x => x.StartsWith("/FilePath:", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(filePathArg)) {
+
+                if (filePathArg.Length > "/FilePath:".Length) {
+                    filePath = filePathArg.Substring("/FilePath:".Length);
                 }
 
-                if (string.IsNullOrWhiteSpace(file)) {
-                    Console.WriteLine("-file not specified.");
+                if (string.IsNullOrWhiteSpace(filePath)) {
+                    Console.WriteLine("FilePath not specified.");
                     return;
                 }
 
-                if (!File.Exists(file)) {
-                    Console.WriteLine($"-file does not exist: {file}");
+                if (!File.Exists(filePath)) {
+                    Console.WriteLine($"FilePath does not exist: {filePath}");
                     return;
                 }
             }
             #endregion
 
-            #region Get computerFqdn and logName
+            #region Get ComputerFqdn and LogName
             else {
-                int computerFqdnIndex = argsList.IndexOf("-computerfqdn");
-                if (computerFqdnIndex > -1) {
-                    if (argsList.Count > (computerFqdnIndex + 1)) {
-                        computerFqdn = argsList[computerFqdnIndex + 1];
+                var computerFqdnArg = args
+                    .Where(x => x.StartsWith("/ComputerFqdn:", StringComparison.OrdinalIgnoreCase))
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(computerFqdnArg)) {
+                    if (computerFqdnArg.Length > "/ComputerFqdn:".Length) {
+                        computerFqdn = computerFqdnArg.Substring("/ComputerFqdn:".Length).Trim().ToUpperInvariant();
                     }
 
                     int dotCount = computerFqdn.Count(x => x == '.');
                     if (dotCount < 2) {
-                        Console.WriteLine("-computerFqdn must be in fqdn format: computername.company.com");
+                        Console.WriteLine($"ComputerFqdn: {computerFqdn} must be in fqdn format: computername.company.com");
                         return;
                     }
                 }
 
                 if (string.IsNullOrWhiteSpace(computerFqdn)) {
-                    Console.WriteLine("-computerFqdn not specified.");
+                    Console.WriteLine("/ComputerFqdn: not specified.");
                     return;
                 }
 
-                int logNameIndex = argsList.IndexOf("-logname");
-                if (logNameIndex > -1) {
-                    if (argsList.Count > (logNameIndex + 1)) {
-                        logName = argsList[logNameIndex + 1];
+                var logNameArg = args
+                    .Where(x => x.StartsWith("/LogName:", StringComparison.OrdinalIgnoreCase))
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(logNameArg)) {
+                    if (logNameArg.Length > "/LogName:".Length) {
+                        logName = logNameArg.Substring("/LogName:".Length);
                     }
                 }
 
                 if (string.IsNullOrWhiteSpace(logName)) {
-                    Console.WriteLine("-logName not specified.");
+                    Console.WriteLine("/LogName: not specified.");
                     return;
                 }
             }
@@ -105,15 +110,15 @@
 
             #region Get event Ids
             var eventIds = new List<int>();
-            int eventsIndex = argsList.IndexOf("-events");
-            if (eventsIndex > -1) {
-                if (argsList.Count > (eventsIndex + 1)) {
-                    var eventIdsText = argsList[eventsIndex + 1].Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            var eventsArg = args
+                .Where(x => x.StartsWith("/Events:", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(eventsArg)) {
+                if (eventsArg.Length > "/Events:".Length) {
+                    var eventIdsText = eventsArg.Substring("/Events:".Length).Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
                     if (eventIdsText.Length > 0) {
                         foreach (var eventIdText in eventIdsText) {
-                            int eventId = -1;
-                            int.TryParse(eventIdText, out eventId);
-                            if (eventId > -1) {
+                            if (int.TryParse(eventIdText, out int eventId)) {
                                 eventIds.Add(eventId);
                             }
                         }
@@ -121,7 +126,7 @@
                 }
 
                 if (eventIds.Count == 0) {
-                    Console.WriteLine("-events specified without required events parameter.");
+                    Console.WriteLine("/Events: specified without required event id's.");
                     return;
                 }
             }
@@ -129,16 +134,18 @@
 
             #region Start date
             var startDate = new DateTime(2010, 1, 1);
-            int startDateIndex = argsList.IndexOf("-startdate");
-            if (startDateIndex > -1) {
-                if (argsList.Count > (startDateIndex + 1)) {
-                    if (!DateTime.TryParseExact(argsList[startDateIndex + 1], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out startDate)) {
-                        Console.WriteLine($"Invalid start date: {argsList[startDateIndex + 1]}");
+            var startDateArg = args
+                .Where(x => x.StartsWith("/StartDate:", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(startDateArg)) {
+                if (startDateArg.Length > "/StartDate:".Length) {
+                    if (!DateTime.TryParseExact(startDateArg.Substring("/StartDate:".Length), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out startDate)) {
+                        Console.WriteLine($"Invalid start date: {startDateArg.Substring("/StartDate:".Length)}");
                         return;
                     }
                 }
                 else {
-                    Console.WriteLine("-startdate specified without required parameter.");
+                    Console.WriteLine("/StartDate: specified without required value.");
                     return;
                 }
             }
@@ -146,16 +153,18 @@
 
             #region End date
             var endDate = DateTime.UtcNow;
-            int endDateIndex = argsList.IndexOf("-enddate");
-            if (endDateIndex > -1) {
-                if (argsList.Count > (endDateIndex + 1)) {
-                    if (!DateTime.TryParseExact(argsList[endDateIndex + 1], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out endDate)) {
-                        Console.WriteLine($"Invalid end date: {argsList[endDateIndex + 1]}");
+            var endDateArg = args
+                .Where(x => x.StartsWith("/EndDate:", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(endDateArg)) {
+                if (endDateArg.Length > "/EndDate:".Length) {
+                    if (!DateTime.TryParseExact(endDateArg.Substring("/EndDate:".Length), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out endDate)) {
+                        Console.WriteLine($"Invalid end date: {endDateArg.Substring("/StartDate:".Length)}");
                         return;
                     }
                 }
                 else {
-                    Console.WriteLine("-enddate specified without required parameter.");
+                    Console.WriteLine("/EndDate: specified without required value.");
                     return;
                 }
             }
@@ -167,33 +176,35 @@
             #endregion
 
             #region Report Format
-            int formatIndex = argsList.IndexOf("-format");
-            if (formatIndex > -1) {
-                if (argsList.Count > (formatIndex + 1)) {
-                    if (Enum.TryParse<ReportFormat>(argsList[formatIndex + 1], ignoreCase: true, result: out format)) {
+            var formatArg = args
+                .Where(x => x.StartsWith("/Format:", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(formatArg)) {
+                if (formatArg.Length > "/Format:".Length) {
+                    if (Enum.TryParse<ReportFormat>(formatArg.Substring("/Format:".Length), ignoreCase: true, result: out format)) {
                         if (!Enum.IsDefined(typeof(ReportFormat), value: format)) {
-                            Console.WriteLine($"Invalid report format specified: {argsList[formatIndex + 1]}");
+                            Console.WriteLine($"Invalid report format specified: {formatArg.Substring("/Format:".Length)}");
                             return;
                         }
                     }
                     else {
-                        Console.WriteLine($"Invalid report format specified: {argsList[formatIndex + 1]}");
+                        Console.WriteLine($"Invalid report format specified: {formatArg.Substring("/Format:".Length)}");
                         return;
                     }
                 }
                 else {
-                    Console.WriteLine("-format specified without required parameter.");
+                    Console.WriteLine("/Format: specified without required value.");
                     return;
                 }
-            } 
+            }
             #endregion
 
             AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
-            TaskProcessor.DoWork(file, computerFqdn, logName, eventIds, startDate, endDate, format);
+            TaskProcessor.DoWork(filePath, computerFqdn, logName, eventIds, startDate, endDate, format);
         }
 
         private static void PrintUsage() {
-            Console.WriteLine("Usage: EventLogParser.exe -file <pathToEvtx> | -computerFqdn <computerName.company.com> -logName <logName> [-events EventId,EventId,EventId] [-startdate yyyy-MM-dd] [-enddate yyyy-MM-dd] [-format CSV | XML]");
+            Console.WriteLine("Usage: EventLogParser.exe /FilePath:<pathToEvtx> | /ComputerFqdn:<computerName.company.com> /LogName:<logName> [/Events:EventId,EventId,EventId] [/Startdate:yyyy-MM-dd] [/Enddate:yyyy-MM-dd] [/Format:CSV | XML]");
         }
 
         /// <summary>

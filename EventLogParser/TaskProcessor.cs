@@ -17,6 +17,7 @@
     using System.Threading.Tasks;
     using System.Xml;
     using System.Xml.Linq;
+    using System.Xml.Serialization;
     #endregion
 
     public class TaskProcessor {
@@ -32,29 +33,30 @@
 
         #region Collections
         /// <summary>
-        /// Friendly description/category for an Event Id. Example: 4264 Logon, 4625 Logon Failure
+        /// Friendly description/category for an Event Id.
+        /// Key: EventLogName-Id-n Value:EventDescription object
         /// </summary>
-        private static Dictionary<int, string> EventCategories { get; set; }
+        private static Dictionary<string, EventDescription> EventDescriptions { get; set; }
 
         /// <summary>
-        /// The Event Id - Column Name cross-reference
-        /// Key: Event Id Value: Dictionary of column names
+        /// The Event - Column Name cross-reference
+        /// Key: EventLogNameId-n Value: Dictionary of column names
         /// </summary>
-        private static Dictionary<int, Dictionary<string, int>> EventColumns { get; set; }
+        private static Dictionary<string, Dictionary<string, int>> EventColumns { get; set; }
 
         /// <summary>
-        /// The Event Id - Event cross-reference
-        /// Key: Event Id Value: Events
+        /// The collection of event data
+        /// Key: EventLogName-Id-n Value: Events
         /// </summary>
-        private static Dictionary<int, List<EventBase>> EventData { get; set; }
+        private static Dictionary<string, List<EventBase>> EventData { get; set; }
         #endregion
         #endregion
 
         #region Constructor
         static TaskProcessor() {
-            EventCategories = new Dictionary<int, string>();
-            EventColumns = new Dictionary<int, Dictionary<string, int>>();
-            EventData = new Dictionary<int, List<EventBase>>();
+            EventDescriptions = new Dictionary<string, EventDescription>(StringComparer.OrdinalIgnoreCase);
+            EventColumns = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+            EventData = new Dictionary<string, List<EventBase>>(StringComparer.OrdinalIgnoreCase);
         }
         #endregion
 
@@ -63,7 +65,7 @@
         /// <summary>
         /// Entry for report creation.  Will call CreateCSVReport or CreateXMLReport.
         /// </summary>
-        /// <param name="reportFileBasePath">The report file base path.  
+        /// <param name="reportFileBasePath">The report file base path.
         /// If specified, the directory for the report files is obtained from this path.
         /// If not specified, the Desktop directory is used.
         /// </param>
@@ -142,7 +144,7 @@
                     #endregion
 
                     #region Get column values for the line
-                    foreach (var columnName in EventColumns[eventBase.EventId].Keys) {
+                    foreach (var columnName in EventColumns[eventBase.EventKey].Keys) {
                         var columnValue = "N/A,";
                         if ((eventBase.EventDataNameElements != null) && (eventBase.EventDataNameElements.Count > 0)) {
                             var columnElement = eventBase.EventDataNameElements
@@ -168,16 +170,12 @@
                 } // foreach (var eventBase in kvpEventData.Value) {
 
                 #region Create report for the specific event id
-                var eventCategory = string.Empty;
-                if (EventCategories.ContainsKey(kvpEventData.Key)) {
-                    eventCategory = $"-{EventCategories[kvpEventData.Key]}";
+                var eventDescription = string.Empty;
+                if (EventDescriptions.ContainsKey(kvpEventData.Key)) {
+                    eventDescription = $"-{EventDescriptions[kvpEventData.Key].Description}";
                 }
 
-                var reportFileName = string.Format("EventId-{0}{1}-{2}-{3}.csv",
-                    kvpEventData.Key,
-                    eventCategory,
-                    firstEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-"),
-                    lastEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-"));
+                var reportFileName = $"EventId-{kvpEventData.Key.Replace("/","-")}{eventDescription}-{firstEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-")}-{lastEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-")}.csv";
                 var reportFilePath = Path.Combine(reportFileBasePath, reportFileName);
 
                 try {
@@ -207,7 +205,7 @@
             foreach (var kvpEventData in EventData) {
                 Console.WriteLine($" - EventId: {kvpEventData.Key} Events: {kvpEventData.Value.Count}");
 
-                var rootElement = new XElement($"ArrayOfEventId{kvpEventData.Key}");
+                var rootElement = new XElement($"ArrayOfEventId{kvpEventData.Key.Replace("/", "-").Replace("+", "-")}");
 
                 var firstEvent = DateTime.MaxValue;
                 var lastEvent = DateTime.MinValue;
@@ -228,7 +226,7 @@
                     #endregion
 
                     #region Get element values unique for the event
-                    foreach (var elementName in EventColumns[eventBase.EventId].Keys) {
+                    foreach (var elementName in EventColumns[eventBase.EventKey].Keys) {
                         var elementValue = "N/A";
 
                         if ((eventBase.EventDataNameElements != null) && (eventBase.EventDataNameElements.Count > 0)) {
@@ -258,16 +256,12 @@
                 } // foreach (var eventBase in kvpEventData.Value) {
 
                 #region Create report for the specific event id
-                var eventCategory = string.Empty;
-                if (EventCategories.ContainsKey(kvpEventData.Key)) {
-                    eventCategory = $"-{EventCategories[kvpEventData.Key]}";
+                var eventDescription = string.Empty;
+                if (EventDescriptions.ContainsKey(kvpEventData.Key)) {
+                    eventDescription = $"-{EventDescriptions[kvpEventData.Key].Description}";
                 }
 
-                var reportFileName = string.Format("EventId-{0}{1}-{2}-{3}.xml",
-                    kvpEventData.Key,
-                    eventCategory,
-                    firstEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-"),
-                    lastEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-"));
+                var reportFileName = $"Event-{kvpEventData.Key.Replace("/","-")}{eventDescription}-{firstEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-")}-{lastEvent.YMDHMFriendly().Replace(":", "-").Replace(" ", "-")}.xml";
                 var reportFilePath = Path.Combine(reportFileBasePath, reportFileName);
 
                 var xDocument = new XDocument(new XDeclaration("1.0", "UTF-8", string.Empty), rootElement);
@@ -290,20 +284,20 @@
         /// <summary>
         /// Primary entry for application execution.
         /// </summary>
-        /// <param name="file">The event log evtx file to parse.</param>
+        /// <param name="filePath">The event log evtx file to parse.</param>
         /// <param name="computerFqdn">The computer to process event logs (if not processing a file).</param>
         /// <param name="eventLogName">The event log name (Required if computerFqdn is specified). Example: Security</param>
         /// <param name="eventIds">Optional.  List of event Ids for the query filter.</param>
         /// <param name="startDate">The start date for the query filter.</param>
         /// <param name="endDate">The end date for the query filter.</param>
         /// <param name="format">The report format (CSV or XML).</param>
-        public static void DoWork(string file, string computerFqdn, string eventLogName, List<int> eventIds, DateTime startDate, DateTime endDate, ReportFormat reportFormat = ReportFormat.CSV) {
+        public static void DoWork(string filePath, string computerFqdn, string eventLogName, IReadOnlyList<int> eventIds, DateTime startDate, DateTime endDate, ReportFormat reportFormat = ReportFormat.CSV) {
 
             #region Validation
-            if (string.IsNullOrWhiteSpace(file) && string.IsNullOrWhiteSpace(computerFqdn)) {
+            if (string.IsNullOrWhiteSpace(filePath) && string.IsNullOrWhiteSpace(computerFqdn)) {
                 throw new ArgumentException("Must specify either file or computerFqdn.");
             }
-            if (!string.IsNullOrWhiteSpace(file) && !string.IsNullOrWhiteSpace(computerFqdn)) {
+            if (!string.IsNullOrWhiteSpace(filePath) && !string.IsNullOrWhiteSpace(computerFqdn)) {
                 throw new ArgumentException("Must specify only file or computerFqdn.");
             }
             if (!string.IsNullOrWhiteSpace(computerFqdn) && string.IsNullOrWhiteSpace(eventLogName)) {
@@ -330,13 +324,13 @@
 
             try {
                 Initialize();
-                if (!string.IsNullOrWhiteSpace(file) && file.EndsWith(".XML", StringComparison.OrdinalIgnoreCase)) {
-                    GetEventsFromXml(file);
+                if (!string.IsNullOrWhiteSpace(filePath) && filePath.EndsWith(".XML", StringComparison.OrdinalIgnoreCase)) {
+                    GetEventsFromXml(filePath);
                 }
                 else {
-                    GetEvents(file, computerFqdn, eventLogName, eventIds, startDate, endDate);
+                    GetEvents(filePath, computerFqdn, eventLogName, eventIds, startDate, endDate);
                 }
-                CreateReport(file);
+                CreateReport(filePath);
             }
             catch (Exception e) {
                 Console.ForegroundColor = ConsoleColor.Red;
@@ -355,7 +349,7 @@
             }
         }
 
-        private static void GetEvents(string file, string computerFqdn, string logName, List<int> eventIds, DateTime startDate, DateTime endDate) {
+        private static void GetEvents(string file, string computerFqdn, string logName, IReadOnlyList<int> eventIds, DateTime startDate, DateTime endDate) {
             Console.WriteLine("{0} - {1} File: {2} Computer: {3} LogName: {4} EventIds: {5} Start Date: {6} End Date: {7}",
                 DateTime.Now.YMDHMSFriendly(), ObjectExtensions.CurrentMethodName(),
                 !string.IsNullOrWhiteSpace(file) ? file : "N/A",
@@ -493,8 +487,8 @@
                 return 1;
             }
 
-            if (!EventColumns.ContainsKey(eventBase.EventId)) {
-                EventColumns.Add(eventBase.EventId, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
+            if (!EventColumns.ContainsKey(eventBase.EventKey)) {
+                EventColumns.Add(eventBase.EventKey, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
             }
 
             foreach (var element in eventBase.EventDataNameElements) {
@@ -511,16 +505,16 @@
                 }
 
                 if (!string.IsNullOrWhiteSpace(columnValue)) {
-                    if (!EventColumns[eventBase.EventId].ContainsKey(columnValue)) {
-                        EventColumns[eventBase.EventId].Add(columnValue, 0);
+                    if (!EventColumns[eventBase.EventKey].ContainsKey(columnValue)) {
+                        EventColumns[eventBase.EventKey].Add(columnValue, 0);
                     }
                 }
             }
 
-            if (!EventData.ContainsKey(eventBase.EventId)) {
-                EventData.Add(eventBase.EventId, new List<EventBase>());
+            if (!EventData.ContainsKey(eventBase.EventKey)) {
+                EventData.Add(eventBase.EventKey, new List<EventBase>());
             }
-            EventData[eventBase.EventId].Add(eventBase);
+            EventData[eventBase.EventKey].Add(eventBase);
 
             return returnCode;
         }
@@ -561,27 +555,32 @@
         private static void Initialize() {
 
             #region EventCategories
-            if (ConfigurationManager.AppSettings["EventCategories"] != null) {
-                var eventCategories = ConfigurationManager.AppSettings["EventCategories"].Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var eventIdAndCategory in eventCategories) {
-                    var eventCategorySplit = eventIdAndCategory.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (eventCategorySplit.Length == 2) {
-                        var eventId = -1;
-                        if (int.TryParse(eventCategorySplit[0], out eventId)) {
-                            if (eventId > 0) {
-                                var eventCategory = eventCategorySplit[1];
-                                if (!EventCategories.ContainsKey(eventId)) {
-                                    EventCategories.Add(eventId, eventCategory);
-                                }
-                            }
-                        }
+            var eventDescriptionsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EventDescriptions.xml");
+            if (File.Exists(eventDescriptionsFilePath)) {
+                var eventDescriptions = new List<EventDescription>();
+                using (var fileStream = new FileStream(eventDescriptionsFilePath, FileMode.Open, FileAccess.Read)) {
+                    var xmlSerializer = new XmlSerializer(typeof(List<EventDescription>));
+                    eventDescriptions = xmlSerializer.Deserialize(fileStream) as List<EventDescription>;
+                }
+
+                foreach (var eventDescription in eventDescriptions) {
+                    if (!eventDescription.IsValid()) {
+                        throw new ApplicationException($"EventDescription is not valid: {eventDescription}");
+                    }
+
+                    var key = $"{eventDescription.EventLog.Trim()}-Id-{eventDescription.EventId}";
+                    if (!EventDescriptions.ContainsKey(key)) {
+                        EventDescriptions.Add(key, eventDescription);
+                    }
+                    else {
+                        throw new ApplicationException($"EventDescriptions already contains entry for: {eventDescription}");
                     }
                 }
-            }
 
-            Console.WriteLine("EventCategories:");
-            foreach (var item in EventCategories) {
-                Console.WriteLine($" - Id: {item.Key} Description: {item.Value}");
+                Console.WriteLine("EventDescriptions:");
+                foreach (var eventDescription in EventDescriptions.Values) {
+                    Console.WriteLine($" - {eventDescription}");
+                }
             }
             #endregion
 

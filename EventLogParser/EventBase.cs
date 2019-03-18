@@ -26,7 +26,7 @@
         #region Members
         #region Static members
         private static readonly string ContainsAlphaCharactersFilter = "[a-zA-Z]*$";
-        private static readonly string JunkCharFFFF = new string((char)Int16.Parse("FFFF", NumberStyles.AllowHexSpecifier), count: 1);
+        private static readonly string JunkCharFFFF = new string((char)short.Parse("FFFF", NumberStyles.AllowHexSpecifier), count: 1);
         #endregion
 
         /// <summary>
@@ -43,6 +43,11 @@
         /// The event id
         /// </summary>
         public virtual int EventId { get; protected set; }
+
+        /// <summary>
+        /// The event channel name+event id
+        /// </summary>
+        public virtual string EventKey { get; protected set; }
 
         /// <summary>
         /// The event record id.  Each event will have a unique record id per machine
@@ -77,6 +82,7 @@
         public EventBase() {
             this.Channel = string.Empty;
             this.EventId = -1;
+            this.EventKey = string.Empty;
             this.EventRecordId = -1;
             this.EventSourceMachine = string.Empty;
             this.EventXmlData = string.Empty;
@@ -175,6 +181,8 @@
             #region Level
             this.Level = this.EventSystemElement.GetElementValue<int>("Level");
             #endregion
+
+            this.EventKey = $"{this.Channel ?? "NULL"}-Id-{this.EventId}";
 
             this.TrimStringValues();
         }
