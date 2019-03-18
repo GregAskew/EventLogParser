@@ -204,7 +204,7 @@
         }
 
         private static void PrintUsage() {
-            Console.WriteLine("Usage: EventLogParser.exe /FilePath:<pathToEvtx> | /ComputerFqdn:<computerName.company.com> /LogName:<logName> [/Events:EventId,EventId,EventId] [/Startdate:yyyy-MM-dd] [/Enddate:yyyy-MM-dd] [/Format:CSV | XML]");
+            Console.WriteLine("Usage: EventLogParser.exe /FilePath:<pathToEvtx> | /ComputerFqdn:<computerName.company.com> /LogName:<logName> [/Events:EventId,EventId,EventId] [/StartDate:yyyy-MM-dd] [/EndDate:yyyy-MM-dd] [/Format:CSV | XML]");
         }
 
         /// <summary>
