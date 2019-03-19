@@ -41,6 +41,13 @@
                 PrintUsage();
                 return;
             }
+
+            if (args.Any(x => x.IndexOf("/Events:", StringComparison.OrdinalIgnoreCase) > -1)
+                && args.Any(x => x.IndexOf("/EventsToSuppress:", StringComparison.OrdinalIgnoreCase) > -1)) {
+                Console.WriteLine("Both /Events: and /EventsToSuppress: may not be specified.");
+                PrintUsage();
+                return;
+            }
             #endregion
 
             var filePath = string.Empty;
@@ -132,6 +139,30 @@
             }
             #endregion
 
+            #region Get event Ids to suppress
+            var eventIdsToSuppress = new List<int>();
+            var eventsToSuppressArg = args
+                .Where(x => x.StartsWith("/EventsToSuppress:", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(eventsToSuppressArg)) {
+                if (eventsToSuppressArg.Length > "/EventsToSuppress:".Length) {
+                    var eventIdsToSuppressText = eventsToSuppressArg.Substring("/EventsToSuppress:".Length).Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (eventIdsToSuppressText.Length > 0) {
+                        foreach (var eventIdText in eventIdsToSuppressText) {
+                            if (int.TryParse(eventIdText, out int eventId)) {
+                                eventIdsToSuppress.Add(eventId);
+                            }
+                        }
+                    }
+                }
+
+                if (eventIdsToSuppress.Count == 0) {
+                    Console.WriteLine("/EventsToSuppress: specified without required event id's.");
+                    return;
+                }
+            }
+            #endregion
+
             #region Start date
             var startDate = new DateTime(2010, 1, 1);
             var startDateArg = args
@@ -200,11 +231,16 @@
             #endregion
 
             AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
-            TaskProcessor.DoWork(filePath, computerFqdn, logName, eventIds, startDate, endDate, format);
+            TaskProcessor.DoWork(filePath, computerFqdn, logName, eventIds, eventIdsToSuppress, startDate, endDate, format);
         }
 
         private static void PrintUsage() {
-            Console.WriteLine("Usage: EventLogParser.exe /FilePath:<pathToEvtx> | /ComputerFqdn:<computerName.company.com> /LogName:<logName> [/Events:EventId,EventId,EventId] [/StartDate:yyyy-MM-dd] [/EndDate:yyyy-MM-dd] [/Format:CSV | XML]");
+            Console.WriteLine("Usage: EventLogParser.exe");
+            Console.WriteLine("  /FilePath:<pathToEvtx> | /ComputerFqdn:<computerName.company.com> /LogName:<logName>");
+            Console.WriteLine("  [/Events:EventId,EventId,EventId] | [/EventsToSuppress:EventId,EventId,EventId]");
+            Console.WriteLine("  [/StartDate:yyyy-MM-dd]");
+            Console.WriteLine("  [/EndDate:yyyy-MM-dd]");
+            Console.WriteLine("  [/Format:CSV | XML");
         }
 
         /// <summary>

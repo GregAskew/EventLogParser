@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
-    <StartArguments>/ComputerFqdn:CONTOSOLADC1.contoso.com /StartDate:2019-01-01 /EndDate:2019-03-18 /LogName:Security /Events:4624,5136,5137,5138,5139,5141 /Format:XML</StartArguments>
+    <StartArguments>/ComputerFqdn:CONTOSOLADC1.contoso.com  /StartDate:2019-01-01 /EndDate:2019-03-20 /LogName:Security /EventsToSuppress:4663,4670 /Format:CSV</StartArguments>
   </PropertyGroup>
 </Project>

@@ -291,7 +291,15 @@
         /// <param name="startDate">The start date for the query filter.</param>
         /// <param name="endDate">The end date for the query filter.</param>
         /// <param name="format">The report format (CSV or XML).</param>
-        public static void DoWork(string filePath, string computerFqdn, string eventLogName, IReadOnlyList<int> eventIds, DateTime startDate, DateTime endDate, ReportFormat reportFormat = ReportFormat.CSV) {
+        public static void DoWork(
+            string filePath,
+            string computerFqdn,
+            string eventLogName,
+            IReadOnlyList<int> eventIds,
+            IReadOnlyList<int> eventIdsToSuppress,
+            DateTime startDate,
+            DateTime endDate,
+            ReportFormat reportFormat = ReportFormat.CSV) {
 
             #region Validation
             if (string.IsNullOrWhiteSpace(filePath) && string.IsNullOrWhiteSpace(computerFqdn)) {
@@ -304,10 +312,10 @@
                 throw new ArgumentException("Must specify eventLogName with computerFqdn.");
             }
             if (eventIds == null) {
-                throw new ArgumentNullException("eventIds");
+                throw new ArgumentNullException(nameof(eventIds));
             }
             if (startDate > endDate) {
-                throw new ArgumentOutOfRangeException("startDate must be less than endDate.");
+                throw new ArgumentOutOfRangeException($"{nameof(startDate)} must be less than {nameof(endDate)}.");
             }
 
             if (!Enum.IsDefined(typeof(ReportFormat), reportFormat)) {
@@ -328,7 +336,7 @@
                     GetEventsFromXml(filePath);
                 }
                 else {
-                    GetEvents(filePath, computerFqdn, eventLogName, eventIds, startDate, endDate);
+                    GetEvents(filePath, computerFqdn, eventLogName, eventIds, eventIdsToSuppress, startDate, endDate);
                 }
                 CreateReport(filePath);
             }
@@ -349,22 +357,30 @@
             }
         }
 
-        private static void GetEvents(string file, string computerFqdn, string logName, IReadOnlyList<int> eventIds, DateTime startDate, DateTime endDate) {
-            Console.WriteLine("{0} - {1} File: {2} Computer: {3} LogName: {4} EventIds: {5} Start Date: {6} End Date: {7}",
+        private static void GetEvents(
+            string filePath,
+            string computerFqdn,
+            string logName,
+            IReadOnlyList<int> eventIds,
+            IReadOnlyList<int> eventIdToSuppress,
+            DateTime startDate,
+            DateTime endDate) {
+            Console.WriteLine("{0} - {1} FilePath: {2} Computer: {3} LogName: {4} EventIds: {5} EventIdsToSuppress: {6} Start Date: {7} End Date: {8}",
                 DateTime.Now.YMDHMSFriendly(), ObjectExtensions.CurrentMethodName(),
-                !string.IsNullOrWhiteSpace(file) ? file : "N/A",
+                !string.IsNullOrWhiteSpace(filePath) ? filePath : "N/A",
                 !string.IsNullOrWhiteSpace(computerFqdn) ? computerFqdn : "N/A",
                 !string.IsNullOrWhiteSpace(logName) ? logName : "N/A",
                 (eventIds.Count > 0) ? eventIds.ToDelimitedString() : "<All Events>",
+                (eventIdToSuppress.Count > 0) ? eventIdToSuppress.ToDelimitedString() : "<No Events>",
                 startDate.YMDFriendly(), endDate.YMDFriendly());
 
             long eventsProcessed = 0;
             var stopwatch = Stopwatch.StartNew();
             var eventReadTimeout = TimeSpan.FromMinutes(5);
 
-            if (!string.IsNullOrWhiteSpace(file)) {
-                if (!file.EndsWith(".EVTX", StringComparison.OrdinalIgnoreCase)) {
-                    Console.WriteLine($"{DateTime.Now.YMDHMSFriendly()} - {ObjectExtensions.CurrentMethodName()} File: {file} if not .XML, file must be an .EVTX file type. Exiting.");
+            if (!string.IsNullOrWhiteSpace(filePath)) {
+                if (!filePath.EndsWith(".EVTX", StringComparison.OrdinalIgnoreCase)) {
+                    Console.WriteLine($"{DateTime.Now.YMDHMSFriendly()} - {ObjectExtensions.CurrentMethodName()} File: {filePath} if not .XML, file must be an .EVTX file type. Exiting.");
                     return;
                 }
             }
@@ -372,6 +388,10 @@
             try {
 
                 #region Construct event query filter
+                var path = !string.IsNullOrWhiteSpace(logName)
+                    ? logName
+                    : filePath;
+
                 var eventIdsFilter = new StringBuilder();
                 if (eventIds.Count > 0) {
                     eventIdsFilter.Append("(");
@@ -384,9 +404,35 @@
                     eventIdsFilter.Append(") and ");
                 }
 
-                var query = $"*[System[{eventIdsFilter.ToString()}TimeCreated[@SystemTime>='{startDate.YMDFriendly()}T00:00:00.000Z' and @SystemTime<'{endDate.Add(TimeSpan.FromDays(1)).YMDFriendly()}T00:00:00.000Z']]]";
+                var query = $"*[System[{eventIdsFilter.ToString()}TimeCreated[@SystemTime&gt;='{startDate.YMDFriendly()}T00:00:00.000Z' and @SystemTime&lt;'{endDate.Add(TimeSpan.FromDays(1)).YMDFriendly()}T00:00:00.000Z']]]";
 
-                Console.WriteLine($"{DateTime.Now.YMDHMSFriendly()} - {ObjectExtensions.CurrentMethodName()} Event query: {query}");
+                var suppressionQuery = string.Empty;
+                if (eventIdToSuppress.Count > 0) {
+                    var eventIdsToSuppressFilter = new StringBuilder();
+                    eventIdsToSuppressFilter.Append("(");
+                    for (int index = 0; index < eventIdToSuppress.Count; index++) {
+                        eventIdsToSuppressFilter.Append($"EventID={eventIdToSuppress[index]}");
+                        if (index < eventIdToSuppress.Count - 1) {
+                            eventIdsToSuppressFilter.Append(" or ");
+                        }
+                    }
+                    eventIdsToSuppressFilter.Append(")");
+
+                    suppressionQuery = $"<Suppress Path=\"{path}\">*[System[{eventIdsToSuppressFilter.ToString()}]]</Suppress>";
+                }
+
+                var fullQuery = new StringBuilder();
+
+                fullQuery.Append("<QueryList>");
+                fullQuery.Append($"<Query Id=\"0\" Path=\"{path}\">");
+                fullQuery.Append($"<Select Path=\"{path}\">{query}</Select>");
+                if (!string.IsNullOrWhiteSpace(suppressionQuery)) {
+                    fullQuery.Append(suppressionQuery);
+                }
+                fullQuery.Append("</Query>");
+                fullQuery.Append("</QueryList>");
+
+                Console.WriteLine($"{DateTime.Now.YMDHMSFriendly()} - {ObjectExtensions.CurrentMethodName()} Event query: {fullQuery}");
                 #endregion
 
                 EventLogQuery eventLogQuery = null;
@@ -395,12 +441,12 @@
                 try {
 
                     if (!string.IsNullOrWhiteSpace(computerFqdn)) {
-                        eventLogQuery = new EventLogQuery(logName, PathType.LogName, query);
+                        eventLogQuery = new EventLogQuery(logName, PathType.LogName, fullQuery.ToString());
                         session = new EventLogSession(computerFqdn);
                         eventLogQuery.Session = session;
                     }
                     else {
-                        eventLogQuery = new EventLogQuery(file, PathType.FilePath, query);
+                        eventLogQuery = new EventLogQuery(filePath, PathType.FilePath, fullQuery.ToString());
                     }
 
                     eventLogQuery.ReverseDirection = EventLogQueryReverseDirection;
