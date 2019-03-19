@@ -112,16 +112,16 @@
                 var headerLine = new StringBuilder();
 
                 #region Column headers for all events
-                headerLine.AppendFormat("EventId,");
-                headerLine.AppendFormat("EventRecordId,");
-                headerLine.AppendFormat("EventSourceMachine,");
-                headerLine.AppendFormat("DateTimeUTC,");
-                headerLine.AppendFormat("Channel,");
-                headerLine.AppendFormat("Level,");
+                headerLine.Append("EventId,");
+                headerLine.Append("EventRecordId,");
+                headerLine.Append("EventSourceMachine,");
+                headerLine.Append("DateTimeUTC,");
+                headerLine.Append("Channel,");
+                headerLine.Append("Level,");
                 #endregion
 
                 foreach (var kvpColumnName in EventColumns[kvpEventData.Key]) {
-                    headerLine.AppendFormat("{0},", kvpColumnName.Key);
+                    headerLine.Append($"{kvpColumnName.Key},");
                 }
 
                 lines.Add(headerLine.ToString());
@@ -135,12 +135,12 @@
 
                     var line = new StringBuilder();
                     #region Column values for all events/lines
-                    line.AppendFormat("{0},", eventBase.EventId);
-                    line.AppendFormat("{0},", eventBase.EventRecordId);
-                    line.AppendFormat("{0},", eventBase.EventSourceMachine ?? "NULL");
-                    line.AppendFormat("{0},", eventBase.DateTimeUTC.YMDHMSFriendly());
-                    line.AppendFormat("{0},", eventBase.Channel);
-                    line.AppendFormat("{0},", eventBase.Level);
+                    line.Append($"{eventBase.EventId},");
+                    line.Append($"{eventBase.EventRecordId},");
+                    line.Append($"{eventBase.EventSourceMachine ?? string.Empty},");
+                    line.Append($"{eventBase.DateTimeUTC.YMDHMSFFFFFFFFriendly()},");
+                    line.Append($"{eventBase.Channel},");
+                    line.Append($"{eventBase.Level},");
                     #endregion
 
                     #region Get column values for the line
@@ -161,7 +161,7 @@
                             }
                         }
 
-                        line.AppendFormat("\"{0}\",", columnValue);
+                        line.Append($"\"{columnValue}\",");
                     }
 
                     #endregion
@@ -376,7 +376,7 @@
                 if (eventIds.Count > 0) {
                     eventIdsFilter.Append("(");
                     for (int index = 0; index < eventIds.Count; index++) {
-                        eventIdsFilter.AppendFormat("EventID={0}", eventIds[index]);
+                        eventIdsFilter.Append($"EventID={eventIds[index]}");
                         if (index < eventIds.Count - 1) {
                             eventIdsFilter.Append(" or ");
                         }
